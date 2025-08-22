@@ -4,103 +4,98 @@
   <meta charset="UTF-8">
   <title>幸运转盘游戏</title>
   <style>
-    body {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      flex-direction: column;
-      background: #f9f9f9;
-      font-family: Arial, sans-serif;
-    }
-
-    .wheel {
-      width: 300px;
-      height: 300px;
-      border-radius: 50%;
-      border: 10px solid #333;
-      position: relative;
-      overflow: hidden;
-      transition: transform 4s cubic-bezier(0.33, 1, 0.68, 1);
-    }
-
-    .wheel div {
-      position: absolute;
-      width: 50%;
-      height: 50%;
-      background: #ffcc00;
-      transform-origin: 100% 100%;
-      border: 1px solid #333;
-    }
-
-    .wheel div:nth-child(1) { transform: rotate(0deg) skewY(-60deg); background: #ff9999; }
-    .wheel div:nth-child(2) { transform: rotate(60deg) skewY(-60deg); background: #99ccff; }
-    .wheel div:nth-child(3) { transform: rotate(120deg) skewY(-60deg); background: #99ff99; }
-    .wheel div:nth-child(4) { transform: rotate(180deg) skewY(-60deg); background: #ffcc99; }
-    .wheel div:nth-child(5) { transform: rotate(240deg) skewY(-60deg); background: #cc99ff; }
-    .wheel div:nth-child(6) { transform: rotate(300deg) skewY(-60deg); background: #ffff99; }
-
-    .arrow {
-      width: 0; 
-      height: 0; 
-      border-left: 20px solid transparent;
-      border-right: 20px solid transparent;
-      border-bottom: 40px solid red;
-      position: absolute;
-      top: -40px;
-      left: calc(50% - 20px);
-    }
-
-    button {
-      margin-top: 20px;
-      padding: 10px 20px;
-      font-size: 16px;
-      cursor: pointer;
-    }
-
-    #result {
-      margin-top: 20px;
-      font-size: 20px;
-      font-weight: bold;
-      color: #333;
-    }
+    body { text-align: center; font-family: Arial, sans-serif; background: #f9f9f9; }
+    .wheel { width: 300px; height: 300px; border-radius: 50%; border: 10px solid #333;
+             margin: 20px auto; transition: transform 4s cubic-bezier(0.33, 1, 0.68, 1);
+             position: relative; overflow: hidden; }
+    .wheel div { position: absolute; width: 50%; height: 50%; transform-origin: 100% 100%;
+                 border: 1px solid #333; }
+    .arrow { width: 0; height: 0; border-left: 20px solid transparent;
+             border-right: 20px solid transparent; border-bottom: 40px solid red;
+             position: absolute; top: -40px; left: calc(50% - 20px); }
+    button { margin: 10px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
+    #result { margin-top: 20px; font-size: 20px; font-weight: bold; }
   </style>
 </head>
 <body>
-  <div class="wheel-container">
+  <h1>幸运转盘 🎯</h1>
+  <div style="position: relative; width: 300px; margin: auto;">
     <div class="arrow"></div>
-    <div class="wheel" id="wheel">
-      <div></div><div></div><div></div>
-      <div></div><div></div><div></div>
-    </div>
+    <div class="wheel" id="wheel"></div>
   </div>
 
   <button onclick="spin()">开始抽奖</button>
   <div id="result"></div>
 
+  <h2>配置奖品</h2>
+  <textarea id="prizeInput" rows="4" cols="40" placeholder="用逗号分隔，如：一等奖,二等奖,谢谢参与"></textarea><br>
+  <button onclick="updatePrizes()">更新奖品</button>
+
   <script>
     let wheel = document.getElementById("wheel");
     let isSpinning = false;
+    let currentPrizes = ["苹果", "香蕉", "红包", "手表", "电话", "谢谢参与"];
+
+    // 绘制转盘
+    function renderWheel() {
+      wheel.innerHTML = "";
+      let count = currentPrizes.length;
+      for (let i = 0; i < count; i++) {
+        let slice = document.createElement("div");
+        slice.style.background = `hsl(${i * (360 / count)}, 70%, 70%)`;
+        slice.style.transform = `rotate(${i * (360 / count)}deg) skewY(-${90 - 360/count}deg)`;
+        wheel.appendChild(slice);
+      }
+    }
+
+    renderWheel();
 
     async function spin() {
       if (isSpinning) return;
       isSpinning = true;
 
-      // 向后端请求一个随机结果
       let response = await fetch("/spin");
       let data = await response.json();
-      let prizeIndex = data.index; // 后端返回的奖品索引
-      let prizeName = data.prize;
 
-      // 每个奖品占 60 度（360/6）
-      let degrees = 360 * 5 + (360 - prizeIndex * 60 - 30); 
-      // 旋转动画
+      if (data.index === -1) {
+        document.getElementById("result").innerText = data.prize;
+        isSpinning = false;
+        return;
+      }
+
+      let prizeIndex = data.index;
+      let prizeName = data.prize;
+      let count = currentPrizes.length;
+
+      // 转盘旋转角度
+      let degrees = 360 * 5 + (360 - prizeIndex * (360/count) - (180/count));
       wheel.style.transform = `rotate(${degrees}deg)`;
 
       setTimeout(() => {
         document.getElementById("result").innerText = "结果：" + prizeName;
         isSpinning = false;
       }, 4500);
+    }
+
+    async function updatePrizes() {
+      let input = document.getElementById("prizeInput").value.trim();
+      if (!input) return alert("请输入奖品列表！");
+      let newPrizes = input.split(",").map(s => s.trim()).filter(s => s);
+
+      let response = await fetch("/set_prizes", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({prizes: newPrizes})
+      });
+
+      let data = await response.json();
+      if (data.status === "ok") {
+        currentPrizes = data.prizes;
+        renderWheel();
+        alert("奖品已更新！");
+      } else {
+        alert("更新失败：" + data.message);
+      }
     }
   </script>
 </body>
